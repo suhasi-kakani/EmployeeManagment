@@ -1,8 +1,6 @@
 ﻿using EmployeeManagment.Dtos;
 using EmployeeManagment.Models;
-using Microsoft.Azure.Cosmos;
 using System.Security.Claims;
-using static Azure.Core.HttpHeader;
 
 namespace EmployeeManagment.Interfaces
 {
@@ -25,7 +23,7 @@ namespace EmployeeManagment.Interfaces
         Task<(List<EmployeeSummaryDto>, string?)> GetEmployeesPaged(
             string? continuationToken,
             int pageSize = 5,
-            string sortBy = "name",
+            string sortBy = "username",
             bool ascending = true);
 
     }

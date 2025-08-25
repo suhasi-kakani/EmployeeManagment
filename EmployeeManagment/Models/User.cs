@@ -2,7 +2,8 @@
 
 namespace EmployeeManagment.Models
 {
-    public class User
+    [JsonConverter(typeof(UserConverter))]
+    public abstract class User
     {
         [JsonProperty("id")]
         public string Id { get; set; } = Guid.NewGuid().ToString();
@@ -14,9 +15,23 @@ namespace EmployeeManagment.Models
         public string PasswordHash { get; set; } = string.Empty;
 
         [JsonProperty("role")]
-        public string Role { get; set; } = string.Empty;
+        public string RoleString
+        {
+            get => Role.ToString();
+            set
+            {
+                if (Enum.TryParse<Role>(value, true, out var role))
+                {
+                    Role = role;
+                }
+                else
+                {
+                    throw new ArgumentException($"Invalid role value: {value}");
+                }
+            }
+        }
 
-        [JsonProperty("employeeId")]
-        public string? EmployeeId { get; set; }
+        [JsonIgnore]
+        public Role Role { get; set; }
     }
 }

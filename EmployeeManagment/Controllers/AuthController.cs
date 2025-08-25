@@ -52,11 +52,10 @@ namespace EmployeeManagment.Controllers
         public async Task<IActionResult> ChangePassword([FromBody] ChnagePasswordRequest req)
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var role = User.FindFirstValue(ClaimTypes.Role);
 
             if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
-            var success = await authService.UpdatePassword(userId, role, req.NewPassword);
+            var success = await authService.UpdatePassword(userId, req.NewPassword);
             if (!success) return BadRequest("Failed to update password");
 
             return Ok("Password updated successfully");

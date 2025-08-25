@@ -2,13 +2,13 @@
 
 namespace EmployeeManagment.Models
 {
-    public class Employee
+    public class Employee : User
     {
-        [JsonProperty("id")]
-        public string Id { get; set; } = Guid.NewGuid().ToString();
 
-        [JsonProperty("name")]
-        public string Name { get; set; } = string.Empty;
+        public Employee()
+        {
+            RoleString = nameof(Role.Employee);
+        }
 
         [JsonProperty("email")]
         public string Email { get; set; } = string.Empty;
@@ -21,11 +21,11 @@ namespace EmployeeManagment.Models
         [JsonProperty("contactNumber")]
         public string ContactNumber { get; set; } = string.Empty;
 
-        [JsonProperty("address")]
-        public Address Address { get; set; }
+        [JsonProperty("address")] 
+        public Address Address { get; set; } = new Address();
 
-        [JsonProperty("employmentHistory")]
-        public List<EmploymentHistory> Employments { get; set; } = new();
+        [JsonProperty("employment")]
+        public List<EmploymentHistory> Employments { get; set; } = new List<EmploymentHistory>();
 
         [JsonProperty("isWorking")]
         public bool IsWorking { get; set; } = true;
@@ -35,7 +35,5 @@ namespace EmployeeManagment.Models
 
         [JsonProperty("updatedAt")]
         public DateTime UpdatedAt { get; set; }
-
-
     }
 }

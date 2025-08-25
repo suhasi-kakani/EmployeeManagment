@@ -11,8 +11,8 @@ namespace EmployeeManagment.Interfaces
 
         public Task<string> LoginUser(UserLoginRequest request);
 
-        public Task<List<User>> GetAllUsers();
+        public Task<List<Employee>> GetAllUsers();
 
-        public Task<bool> UpdatePassword(string id, string role, string passoword);
+        public Task<bool> UpdatePassword(string id, string passoword);
     }
 }

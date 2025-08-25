@@ -2,11 +2,12 @@
 using EmployeeManagment.Dtos;
 using EmployeeManagment.Interfaces;
 using EmployeeManagment.Models;
-using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using EmployeeManagment.Repository;
-using User = EmployeeManagment.Models.User;
+using EmployeeManagment.Utilities;
+using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System.Security.Claims;
 
 namespace EmployeeManagment.Services
 {
@@ -14,44 +15,71 @@ namespace EmployeeManagment.Services
     {
         private readonly EmployeeRepository employeeRepository;
         private readonly UserRepository userRepository;
+        private readonly ILogger<EmployeeService> logger;
 
-        public EmployeeService(EmployeeRepository employeeRepository, UserRepository userRepository)
+        public EmployeeService(EmployeeRepository employeeRepository, UserRepository userRepository, ILogger<EmployeeService> logger)
         {
             this.employeeRepository = employeeRepository;
             this.userRepository = userRepository;
+            this.logger = logger;
+
         }
         public async Task<Employee> CreateEmployee(EmployeeRequest request)
         {
+            if (request == null || string.IsNullOrEmpty(request.Name) || string.IsNullOrEmpty(request.Department))
+            {
+                logger.LogWarning("Invalid employee creation request: Name or Department is missing.");
+                throw new ArgumentException("Name and Department are required.");
+            }
+
+            logger.LogInformation("Creating employee with username {Username}", request.Name);
+
             var employee = new Employee
             {
                 Id = Guid.NewGuid().ToString(),
-                Name = request.Name,
+                Username = request.Name,
                 Email = request.Email,
                 Designation = request.Designation,
                 Department = request.Department,
                 ContactNumber = request.ContactNumber,
-                Address = new Address(), // empty at start
+                IsWorking = true,
+                PasswordHash = PasswordHasher.HashPassword("Default@123"),
+                Address = new Address(),
                 Employments = new List<EmploymentHistory>()
             };
 
-            var newEmployee = await employeeRepository.CreateEmployee(employee);
-
-            var user = new User
+            try
             {
-                EmployeeId = employee.Id,
-                Role = "Employee",
-                Id = Guid.NewGuid().ToString(),
-                Username = employee.Name,
-                PasswordHash = HashPassword("Default@123"),
-            };
+                logger.LogInformation("Employee created successfully with ID {EmployeeId} Line 52", employee.Department);
+                var newEmployee = await employeeRepository.CreateEmployee(employee);
+                logger.LogInformation("Employee created successfully with ID {EmployeeId}", newEmployee.Id);
 
-            await userRepository.CreateUser(user);
-            return newEmployee;
-        }
+                var user = new EmployeeUser
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    Role = Role.Employee,
+                    Username = employee.Username,
+                    PasswordHash = PasswordHasher.HashPassword("Default@123"),
+                    EmployeeId = newEmployee.Id,
+                };
+                var json = JsonConvert.SerializeObject(user, Formatting.Indented);
+                logger.LogInformation("Creating User JSON: {Json}", json);
 
-        private string HashPassword(string v)
-        {
-           return Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(v)));
+                await userRepository.CreateUser(user);
+                logger.LogInformation("EmployeeUser created successfully with ID {UserId}", user.Id);
+
+                return newEmployee;
+            }
+            catch (CosmosException ex)
+            {
+                logger.LogError(ex, "Cosmos DB error while creating employee or user for username {Username}", request.Name);
+                throw new InvalidOperationException($"Failed to create employee: {ex.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error while creating employee for username {Username}", request.Name);
+                throw;
+            }
         }
 
         public async Task<IEnumerable<Employee>> GetEmployees()
@@ -67,21 +95,52 @@ namespace EmployeeManagment.Services
             return response;
         }
 
-        public async Task<Employee?> GetEmployee(ClaimsPrincipal id)
+        public async Task<Employee> GetEmployee(ClaimsPrincipal claimsPrincipal)
         {
-            var userId = id.FindFirstValue(ClaimTypes.NameIdentifier);
-            var userRole = id.FindFirstValue(ClaimTypes.Role);
-            
-            if (userId == null)
+            var userId = claimsPrincipal.FindFirstValue(ClaimTypes.NameIdentifier);
+            var userRoleString = claimsPrincipal.FindFirstValue(ClaimTypes.Role);
+
+            if (string.IsNullOrEmpty(userId) || string.IsNullOrEmpty(userRoleString))
+            {
+                logger.LogWarning("Invalid claims: userId or role is missing.");
                 return null;
-            var userResponse = await userRepository.GetById(userId, userRole);
+            }
 
-            var user = userResponse;
+            if (!Enum.TryParse<Role>(userRoleString, true, out var userRole))
+            {
+                logger.LogWarning("Invalid role value: {Role}", userRoleString);
+                return null;
+            }
 
-            if (user?.EmployeeId == null) return null;
+            logger.LogInformation("Retrieving user with ID {UserId} and role {Role}", userId, userRole);
+            var user = await userRepository.GetById(userId, userRole);
 
-            var response =  await employeeRepository.GetByOnlyId(user.EmployeeId);
-            return response;
+            if (user == null)
+            {
+                logger.LogWarning("User not found for ID {UserId}", userId);
+                return null;
+            }
+
+            if (user is not EmployeeUser employeeUser || string.IsNullOrEmpty(employeeUser.EmployeeId))
+            {
+                logger.LogWarning("User {UserId} is not an employee or has no EmployeeId.", userId);
+                return null;
+            }
+
+            logger.LogInformation("Retrieving employee with ID {EmployeeId}", employeeUser.EmployeeId);
+            var employee = await employeeRepository.GetByOnlyId(employeeUser.EmployeeId);
+
+            if (employee == null)
+            {
+                logger.LogWarning("Employee not found for ID {EmployeeId}", employeeUser.EmployeeId);
+                return null;
+            }
+
+            employee.Username = employeeUser.Username;
+            employee.Id = employeeUser.Id;   
+
+            logger.LogInformation("Successfully retrieved employee with ID {EmployeeId}", employee.Id);
+            return employee;
         }
 
         public async Task<Employee> UpdateEmployeeBasic(string id, string department, EmployeeRequest request)
@@ -89,7 +148,7 @@ namespace EmployeeManagment.Services
             var employee = await GetEmployeeById(id, department);
             if (employee == null) return null;
 
-            employee.Name = request.Name;
+            employee.Username = request.Name;
             employee.Email = request.Email;
             employee.Designation = request.Designation;
             employee.Department = request.Department;
@@ -121,12 +180,21 @@ namespace EmployeeManagment.Services
         public async Task<Employee> UpdateEmploymentHistory(string id, string department, List<EmploymentHistory> histories)
         {
             var employee = await GetEmployeeById(id, department);
-            if (employee == null) return null;
+            if (employee == null)
+            {
+                logger.LogWarning("Employee not found with Id={Id}, Department={Department}", id, department);
+                return null;
+            }
+            
+            logger.LogInformation("Employee before update line 192: {@Employee}", employee);
 
             employee.Employments.AddRange(histories);
             employee.UpdatedAt = DateTime.UtcNow;
 
+            logger.LogInformation("Employee before update line 197: {@Employee}", employee);
+
             var response = await employeeRepository.Update(employee);
+            logger.LogInformation("Employee after update: {@Employee}", response);
             return response;
         }
 
@@ -139,7 +207,7 @@ namespace EmployeeManagment.Services
         public async Task<(List<EmployeeSummaryDto>, string?)> GetEmployeesPaged(
             string? continuationToken,
             int pageSize = 5,
-            string sortBy = "name",
+            string sortBy = "username",
             bool ascending = true)
         {
             var (result, newToken) = await employeeRepository.GetPaged(continuationToken, pageSize, sortBy,

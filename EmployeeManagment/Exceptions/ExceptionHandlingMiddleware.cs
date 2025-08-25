@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using Microsoft.Azure.Cosmos;
 
 namespace EmployeeManagment.Exceptions
 {
@@ -30,6 +31,11 @@ namespace EmployeeManagment.Exceptions
             {
                 logger.LogWarning(ex, "Unauthorized access");
                 await HandleExceptionAsync(context, (int)HttpStatusCode.Unauthorized, ex.Message);
+            }
+            catch (CosmosException ex)
+            {
+                logger.LogWarning(ex, "Internal server error");
+                await HandleExceptionAsync(context, (int)HttpStatusCode.InternalServerError, ex.Message);
             }
             catch (Exception ex)
             {

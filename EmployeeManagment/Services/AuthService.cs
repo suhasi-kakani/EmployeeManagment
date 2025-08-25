@@ -1,14 +1,12 @@
-﻿using Azure.Core;
-using EmployeeManagment.Dtos;
+﻿using EmployeeManagment.Dtos;
 using EmployeeManagment.Interfaces;
 using EmployeeManagment.Models;
 using EmployeeManagment.Repository;
-using Microsoft.Azure.Cosmos;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
+using EmployeeManagment.Utilities;
 using User = EmployeeManagment.Models.User;
 
 namespace EmployeeManagment.Services
@@ -31,7 +29,7 @@ namespace EmployeeManagment.Services
             var claims = new List<Claim>
             {
                 new Claim(ClaimTypes.Name, request.Username),
-                new Claim(ClaimTypes.Role, request.Role),
+                new Claim(ClaimTypes.Role, request.RoleString),
                 new Claim(ClaimTypes.NameIdentifier, request.Id)
             };
 
@@ -50,16 +48,30 @@ namespace EmployeeManagment.Services
 
         public async Task<User> RegisterUser(UserRegisterRequest request)
         {
-            request.Password = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(request.Password)));
-            var newUser = new User
+            if (request == null || string.IsNullOrEmpty(request.Username) || string.IsNullOrEmpty(request.Password))
+            {
+                logger.LogWarning("Invalid registration request: Username or password is missing.");
+                throw new ArgumentException("Username and password are required.");
+            }
+
+            if (request.Role != Role.Admin)
+            {
+                logger.LogWarning("Unauthorized registration attempt for role {Role} by username {Username}", request.Role, request.Username);
+                throw new UnauthorizedAccessException("Only admins can register.");
+            }
+
+            logger.LogInformation("Registering admin with username {Username}", request.Username);
+            var newAdmin = new Admin
             {
                 Id = Guid.NewGuid().ToString(),
                 Username = request.Username,
-                PasswordHash = request.Password,
-                Role = request.Role,
+                PasswordHash = PasswordHasher.HashPassword(request.Password),
+                Role = Role.Admin
             };
-            var response = await userRepository.CreateUser(newUser);
-            return response;
+
+            var user = await userRepository.CreateUser(newAdmin);
+            logger.LogInformation("Admin registered successfully with ID {UserId}", user.Id);
+            return user;
         }
 
         public async Task<string> LoginUser(UserLoginRequest request)
@@ -72,15 +84,15 @@ namespace EmployeeManagment.Services
             return token;
         }
 
-        public async Task<List<User>> GetAllUsers()
+        public async Task<List<Employee>> GetAllUsers()
         {
            var response = await userRepository.GetActiveUsers();
            return response;
         }
 
-        public async Task<bool> UpdatePassword(string id, string role, string password)
+        public async Task<bool> UpdatePassword(string id, string password)
         {
-           var response = await userRepository.UpdatePassword(id, role, password);
+           var response = await userRepository.UpdatePassword(id, password);
            return response;
         }
     }
