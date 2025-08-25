@@ -23,27 +23,35 @@ namespace EmployeeManagment.Controllers
         public async Task<IActionResult> CreateEmployee([FromBody] EmployeeRequest employee)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
-            var newEmployee = await employeeService.CreateEmployee(employee);
-            return Ok(newEmployee);
+            var result = await employeeService.CreateEmployee(employee);
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
         
         [HttpGet]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetEmployees()
         {
-            var employees = await employeeService.GetEmployees();
-            return Ok(employees);
+            var result = await employeeService.GetEmployees();
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetEmployeeById([FromQuery] string department, string id)
         {
-            var employee = await employeeService.GetEmployeeById(id, department);
-            if (employee == null)
+            var result = await employeeService.GetEmployeeById(id, department);
+            if (result.IsSuccess)
             {
-                return NotFound("No employee found");
+                return Ok(result.Value);
             }
-            return Ok(employee);
+            return BadRequest(new { Error = result.ErrorMessage });
         }
         
         [HttpGet("me")]
@@ -51,10 +59,12 @@ namespace EmployeeManagment.Controllers
         public async Task<IActionResult> GetMyProfile()
         {
 
-            var employee = await employeeService.GetEmployee(User);
-            if (employee == null) return NotFound();
-
-            return Ok(employee);
+            var result = await employeeService.GetEmployee(User);
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
 
         [HttpPut("{id}/{department}")]
@@ -63,10 +73,12 @@ namespace EmployeeManagment.Controllers
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var employee = await employeeService.UpdateEmployeeBasic(id, department, request);
-            if (employee == null) return NotFound();
-
-            return Ok(employee);
+            var result = await employeeService.UpdateEmployeeBasic(id, department, request);
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
         
         [HttpPut("{id}/{department}/address")]
@@ -75,10 +87,12 @@ namespace EmployeeManagment.Controllers
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var employee = await employeeService.UpdateAddress(id, department, address);
-            if (employee == null) return NotFound();
-
-            return Ok(employee);
+            var result = await employeeService.UpdateAddress(id, department, address);
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return NotFound(new { Error = result.ErrorMessage });
         }
         
         [HttpPut("{id}/{department}/history")]
@@ -87,28 +101,36 @@ namespace EmployeeManagment.Controllers
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
-            var employee = await employeeService.UpdateEmploymentHistory(id, department, history);
-            if (employee == null) return NotFound();
-
-            return Ok(employee);
+            var result = await employeeService.UpdateEmploymentHistory(id, department, history);
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return NotFound(new { Error = result.ErrorMessage });
         }
         
         [HttpDelete("{id}/{department}")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> DeleteEmployee(string id, string department)
         {
-            var deleted = await employeeService.DeleteEmployee(id, department);
-            if (!deleted) return NotFound();
-
-            return Ok(new { message = "Employee deleted successfully" });
+            var result = await employeeService.DeleteEmployee(id, department);
+            if (result.IsSuccess)
+            {
+                return Ok(new { Message = "Employee deleted successfully" });
+            }
+            return NotFound(new { Error = result.ErrorMessage });
         }
 
         [HttpGet("basic")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetEmployeesBasic()
         {
-            var employees = await employeeService.GetAllEmployeesBasic();
-            return Ok(employees);
+            var result = await employeeService.GetAllEmployeesBasic();
+            if (result.IsSuccess)
+            {
+                return Ok(result.Value);
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
 
         [HttpGet("paged")]
@@ -116,16 +138,20 @@ namespace EmployeeManagment.Controllers
         public async Task<IActionResult> GetEmployeesPaged(
             [FromQuery] string? continuationToken,
             [FromQuery] int pageSize = 5,
-            [FromQuery] string sortBy = "name",
+            [FromQuery] string sortBy = "username",
             [FromQuery] bool ascending = true)
         {
-            var (employees, newToken) = await employeeService.GetEmployeesPaged(continuationToken, pageSize, sortBy, ascending);
+            var result = await employeeService.GetEmployeesPaged(continuationToken, pageSize, sortBy, ascending);
 
-            return Ok(new
+            if (result.IsSuccess)
             {
-                Data = employees,
-                ContinuationToken = newToken
-            });
+                return Ok(new
+                {
+                    Data = result.Value.Item1,
+                    ContinuationToken = result.Value.Item2
+                });
+            }
+            return BadRequest(new { Error = result.ErrorMessage });
         }
 
     }

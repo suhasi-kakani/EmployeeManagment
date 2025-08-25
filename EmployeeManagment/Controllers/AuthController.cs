@@ -20,31 +20,36 @@ namespace EmployeeManagment.Controllers
         [HttpPost("register")]
         public async Task<IActionResult> Register(UserRegisterRequest request)
         {
-            var user = await authService.RegisterUser(request);
-            if (user == null)
+            var result = await authService.RegisterUser(request);
+            if (!result.IsSuccess)
             {
-                return BadRequest();
+                return BadRequest(new { Error = result.ErrorMessage });
             }
-            return Ok(user);
+            return Ok(result.Value);
         }
 
         [HttpPost("login")]
         public async Task<IActionResult> Login(UserLoginRequest request)
         {
-            var token = await authService.LoginUser(request);
-            if (token == null)
+            var result = await authService.LoginUser(request);
+            if (!result.IsSuccess)
             {
-                return BadRequest("Invalid Credentials.");
+                return BadRequest(new { Error = result.ErrorMessage });
             }
-            return Ok(new {token});
+            return Ok(new {Token = result.Value});
         }
 
         [HttpGet("active-users")]
         [Authorize(Roles = "Admin")]
         public async Task<IActionResult> GetAllUsers()
         {
-            var users = await authService.GetAllUsers();
-            return Ok(users);
+            var result = await authService.GetAllUsers();
+            if (!result.IsSuccess)
+            {
+                return BadRequest(new { Error = result.ErrorMessage });
+            }
+
+            return Ok(result.Value);
         }
 
         [HttpPut]
@@ -53,12 +58,15 @@ namespace EmployeeManagment.Controllers
         {
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-            if (string.IsNullOrEmpty(userId)) return Unauthorized();
+            if (string.IsNullOrEmpty(userId))
+            {
+                return Unauthorized(new { Error = "User ID not found in token." });
+            }
 
-            var success = await authService.UpdatePassword(userId, req.NewPassword);
-            if (!success) return BadRequest("Failed to update password");
+            var result = await authService.UpdatePassword(userId, req.NewPassword);
+            if (!result.IsSuccess) return BadRequest(new { Error = result.ErrorMessage });
 
-            return Ok("Password updated successfully");
+            return Ok(new { Message = "Password updated successfully" });
         }
     }
 }

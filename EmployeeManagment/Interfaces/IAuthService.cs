@@ -1,5 +1,6 @@
 ﻿using EmployeeManagment.Dtos;
 using EmployeeManagment.Models;
+using EmployeeManagment_MSSQL.Exceptions;
 
 namespace EmployeeManagment.Interfaces
 {
@@ -7,12 +8,12 @@ namespace EmployeeManagment.Interfaces
     {
         public string CreateToken(User request);
 
-        public Task<User> RegisterUser(UserRegisterRequest request);
+        public Task<Result<User>> RegisterUser(UserRegisterRequest request);
 
-        public Task<string> LoginUser(UserLoginRequest request);
+        public Task<Result<string>> LoginUser(UserLoginRequest request);
 
-        public Task<List<Employee>> GetAllUsers();
+        public Task<Result<List<Employee>>> GetAllUsers();
 
-        public Task<bool> UpdatePassword(string id, string passoword);
+        public Task<Result> UpdatePassword(string id, string passoword);
     }
 }

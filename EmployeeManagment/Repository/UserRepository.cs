@@ -4,6 +4,7 @@ using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
 using System.Text;
+using EmployeeManagment_MSSQL.Exceptions;
 using User = EmployeeManagment.Models.User;
 
 namespace EmployeeManagment.Repository
@@ -19,38 +20,42 @@ namespace EmployeeManagment.Repository
             this.logger = logger;
         }
 
-        public async Task<User> CreateUser(User user)
+        public async Task<Result<User>> CreateUser(User user)
         {
-            if (user == null || string.IsNullOrEmpty(user.Id) || string.IsNullOrEmpty(user.RoleString))
-            {
-                logger.LogWarning("Attempted to create user with invalid data.");
-                throw new ArgumentException("User data is incomplete.");
-            }
-
             try
             {
-                logger.LogInformation("Creating user with ID {UserId} and role {Role}", user.Id, user.RoleString);
+                if (user == null || string.IsNullOrEmpty(user.Id) || string.IsNullOrEmpty(user.RoleString))
+                {
+                    logger.LogInformation("Attempted to create user with invalid data.");
+                    return Result<User>.Failure("User data is incomplete.");
+                }
+                
                 var response = await cosmos.UserContainer.UpsertItemAsync(user, new PartitionKey(user.RoleString));
                 logger.LogInformation("User created successfully with ID {UserId}", user.Id);
-                return response.Resource;
+                return Result<User>.Success(response.Resource);
             }
             catch (CosmosException ex)
             {
-                logger.LogError(ex, "Cosmos DB error while creating user with ID {UserId}", user.Id);
-                throw new InvalidOperationException($"Failed to create user: {ex.Message}", ex);
+                logger.LogError(ex, "Cosmos DB error while creating user with ID {UserId}", user?.Id);
+                return Result<User>.Failure($"Failed to create user: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error while creating user with ID {UserId}", user?.Id);
+                return Result<User>.Failure($"Unexpected error while creating user: {ex.Message}");
             }
         }
 
-        public async Task<User> LoginUser(string username, string password)
+        public async Task<Result<User>> LoginUser(string username, string password)
         {
-            if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
-            {
-                logger.LogWarning("Login attempt with empty username or password.");
-                return null;
-            }
-
             try
             {
+                if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(password))
+                {
+                    logger.LogInformation("Login attempt with empty username or password.");
+                    return Result<User>.Failure("Username and password are required.");
+                }
+
                 logger.LogInformation("Attempting login for username: {Username}", username);
                 var query = new QueryDefinition("SELECT * FROM c WHERE c.username = @username")
                     .WithParameter("@username", username);
@@ -60,57 +65,72 @@ namespace EmployeeManagment.Repository
 
                 if (user == null)
                 {
-                    logger.LogWarning("User not found for username: {Username}", username);
-                    return null;
+                    logger.LogInformation("User not found for username: {Username}", username);
+                    return Result<User>.Failure("User not found.");
                 }
 
                 logger.LogInformation("User found: ID = {UserId}, Role = {Role}", user.Id, user.RoleString);
 
-                var hash = Convert.ToBase64String(
-                    SHA256.HashData(Encoding.UTF8.GetBytes(password))
-                );
+                var hash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(password)));
 
                 if (hash != user.PasswordHash)
                 {
-                    logger.LogWarning("Password verification failed for username: {Username}", username);
-                    return null;
+                    logger.LogInformation("Password verification failed for username: {Username}", username);
+                    return Result<User>.Failure("Invalid password.");
                 }
 
                 logger.LogInformation("Login successful for username: {Username}", username);
-                return user;
+                return Result<User>.Success(user);
             }
             catch (CosmosException ex)
             {
                 logger.LogError(ex, "Cosmos DB error during login for username: {Username}", username);
-                return null;
+                return Result<User>.Failure($"Failed to login user: {ex.Message}");
             }
             catch (JsonSerializationException ex)
             {
                 logger.LogError(ex, "Serialization error during login for username: {Username}", username);
-                return null;
+                return Result<User>.Failure($"Serialization error during login: {ex.Message}");
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Unexpected error during login for username: {Username}", username);
-                return null;
+                return Result<User>.Failure($"Unexpected error during login: {ex.Message}");
             }
         }
 
-
-        public async Task<User?> GetById(string id, Role role)
+        public async Task<Result<User>> GetById(string id, Role role)
         {
             try
             {
+                if (string.IsNullOrEmpty(id))
+                {
+                    logger.LogInformation("Invalid user ID provided for GetById.");
+                    return Result<User>.Failure("User ID is required.");
+                }
+
                 var response = await cosmos.UserContainer.ReadItemAsync<User>(id, new PartitionKey(role.ToString()));
-                return response.Resource;
+                return Result<User>.Success(response.Resource);
             }
             catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
-                return null;
+                logger.LogInformation("User not found for ID {UserId} and role {Role}", id, role);
+                return Result<User>.Failure("User not found.");
+            }
+            catch (CosmosException ex)
+            {
+                logger.LogError(ex, "Cosmos DB error while retrieving user with ID {UserId}", id);
+                return Result<User>.Failure($"Failed to retrieve user: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error while retrieving user with ID {UserId}", id);
+                return Result<User>.Failure($"Unexpected error while retrieving user: {ex.Message}");
             }
         }
 
-        public async Task<List<Employee>> GetActiveUsers()
+
+        public async Task<Result<List<Employee>>> GetActiveUsers()
         {
             try
             {
@@ -139,7 +159,7 @@ namespace EmployeeManagment.Repository
                 {
                     if (string.IsNullOrEmpty(user.EmployeeId))
                     {
-                        logger.LogWarning("EmployeeUser {UserId} has no EmployeeId.", user.Id);
+                        logger.LogInformation("EmployeeUser {UserId} has no EmployeeId.", user.Id);
                         continue;
                     }
 
@@ -154,7 +174,7 @@ namespace EmployeeManagment.Repository
                     if (employee != null && employee.IsWorking)
                     {
                         logger.LogInformation("Employee {EmployeeId} is active.", user.EmployeeId);
-                        activeEmployees.Add(employee);  
+                        activeEmployees.Add(employee);
                     }
                     else
                     {
@@ -163,47 +183,61 @@ namespace EmployeeManagment.Repository
                 }
 
                 logger.LogInformation("Returning {Count} active Employee records.", activeEmployees.Count);
-                return activeEmployees;
+                return Result<List<Employee>>.Success(activeEmployees);
             }
             catch (CosmosException ex)
             {
                 logger.LogError(ex, "Cosmos DB error while retrieving active users.");
-                return new List<Employee>();
+                return Result<List<Employee>>.Failure($"Failed to retrieve active users: {ex.Message}");
             }
             catch (JsonSerializationException ex)
             {
                 logger.LogError(ex, "Serialization error while retrieving active users.");
-                return new List<Employee>();
+                return Result<List<Employee>>.Failure($"Serialization error while retrieving active users: {ex.Message}");
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "Unexpected error while retrieving active users.");
-                return new List<Employee>();
+                return Result<List<Employee>>.Failure($"Unexpected error while retrieving active users: {ex.Message}");
             }
         }
 
-
-
-        public async Task<bool> UpdatePassword(string id, string newPassword)
+        public async Task<Result> UpdatePassword(string id, string newPassword)
         {
             try
             {
+                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(newPassword))
+                {
+                    logger.LogInformation("Invalid input for updating password: ID or new password is missing.");
+                    return Result.Failure("User ID and new password are required.");
+                }
+
                 var query = new QueryDefinition("SELECT * FROM c WHERE c.id = @id")
                     .WithParameter("@id", id);
 
                 var iterator = cosmos.UserContainer.GetItemQueryIterator<User>(query);
                 var user = (await iterator.ReadNextAsync()).FirstOrDefault();
-               
-                if(user == null) { return false; }
+
+                if (user == null)
+                {
+                    logger.LogInformation("User not found for ID {UserId}", id);
+                    return Result.Failure("User not found.");
+                }
 
                 user.PasswordHash = Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(newPassword)));
-
-                await cosmos.UserContainer.ReplaceItemAsync(user, user.Id, new PartitionKey(user.Role.ToString()));
-                return true;
+                await cosmos.UserContainer.ReplaceItemAsync(user, user.Id, new PartitionKey(user.RoleString));
+                logger.LogInformation("Password updated successfully for user ID {UserId}", id);
+                return Result.Success();
             }
-            catch (CosmosException e)
+            catch (CosmosException ex)
             {
-                return false;
+                logger.LogError(ex, "Cosmos DB error while updating password for user ID {UserId}", id);
+                return Result.Failure($"Failed to update password: {ex.Message}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Unexpected error while updating password for user ID {UserId}", id);
+                return Result.Failure($"Unexpected error while updating password: {ex.Message}");
             }
         }
     }
