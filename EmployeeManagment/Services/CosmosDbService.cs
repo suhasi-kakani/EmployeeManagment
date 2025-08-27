@@ -1,14 +1,20 @@
-﻿using Microsoft.Azure.Cosmos;
+﻿using EmployeeManagment.Interfaces;
+using Microsoft.Azure.Cosmos;
 
 namespace EmployeeManagment.Services
 {
-    public class CosmosDbService
+    public class CosmosDbService : ICosmosDbService
     {
         private readonly CosmosClient cosmosClient;
         private readonly Database database;
 
         public Container EmployeeContainer { get; }
         public Container UserContainer { get; }
+
+        public CosmosDbService()
+        {
+            
+        }
 
         public CosmosDbService(IConfiguration config)
         {

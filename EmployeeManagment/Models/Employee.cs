@@ -28,7 +28,7 @@ namespace EmployeeManagment.Models
         public List<EmploymentHistory> Employments { get; set; } = new List<EmploymentHistory>();
 
         [JsonProperty("isWorking")]
-        public bool IsWorking { get; set; } = true;
+        public bool IsWorking { get; set; }
 
         [JsonProperty("createdAt")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

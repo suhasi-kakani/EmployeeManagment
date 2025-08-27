@@ -14,11 +14,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSingleton<CosmosDbService>();
+builder.Services.AddSingleton<ICosmosDbService, CosmosDbService>();
 builder.Services.AddSingleton<IAuthService, AuthService>();
 builder.Services.AddSingleton<IEmployeeService, EmployeeService>();
-builder.Services.AddSingleton<EmployeeRepository>();
-builder.Services.AddSingleton<UserRepository>();
+builder.Services.AddSingleton<IEmployeeRepository, EmployeeRepository>();
+builder.Services.AddSingleton<IUserRepository, UserRepository>();
 builder.Services.AddTransient<ExceptionHandlingMiddleware>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

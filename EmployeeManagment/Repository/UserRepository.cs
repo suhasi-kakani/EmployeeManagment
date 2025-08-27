@@ -4,17 +4,20 @@ using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using System.Security.Cryptography;
 using System.Text;
+using EmployeeManagment.Interfaces;
 using EmployeeManagment_MSSQL.Exceptions;
 using User = EmployeeManagment.Models.User;
 
 namespace EmployeeManagment.Repository
 {
-    public class UserRepository
+    public class UserRepository : IUserRepository
     {
-        private readonly CosmosDbService cosmos;
+        private readonly ICosmosDbService cosmos;
         private readonly ILogger<UserRepository> logger;
 
-        public UserRepository(CosmosDbService cosmos, ILogger<UserRepository> logger)
+        public UserRepository(){}
+
+        public UserRepository(ICosmosDbService cosmos, ILogger<UserRepository> logger)
         {
             this.cosmos = cosmos;
             this.logger = logger;
@@ -173,7 +176,6 @@ namespace EmployeeManagment.Repository
 
                     if (employee != null && employee.IsWorking)
                     {
-                        logger.LogInformation("Employee {EmployeeId} is active.", user.EmployeeId);
                         activeEmployees.Add(employee);
                     }
                     else
@@ -187,17 +189,14 @@ namespace EmployeeManagment.Repository
             }
             catch (CosmosException ex)
             {
-                logger.LogError(ex, "Cosmos DB error while retrieving active users.");
                 return Result<List<Employee>>.Failure($"Failed to retrieve active users: {ex.Message}");
             }
             catch (JsonSerializationException ex)
             {
-                logger.LogError(ex, "Serialization error while retrieving active users.");
                 return Result<List<Employee>>.Failure($"Serialization error while retrieving active users: {ex.Message}");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Unexpected error while retrieving active users.");
                 return Result<List<Employee>>.Failure($"Unexpected error while retrieving active users: {ex.Message}");
             }
         }

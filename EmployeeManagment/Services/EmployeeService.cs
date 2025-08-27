@@ -13,11 +13,16 @@ namespace EmployeeManagment.Services
 {
     public class EmployeeService : IEmployeeService
     {
-        private readonly EmployeeRepository employeeRepository;
-        private readonly UserRepository userRepository;
+        private readonly IEmployeeRepository employeeRepository;
+        private readonly IUserRepository userRepository;
         private readonly ILogger<EmployeeService> logger;
 
-        public EmployeeService(EmployeeRepository employeeRepository, UserRepository userRepository, ILogger<EmployeeService> logger)
+        public EmployeeService()
+        {
+            
+        }
+
+        public EmployeeService(IEmployeeRepository employeeRepository, IUserRepository userRepository, ILogger<EmployeeService> logger)
         {
             this.employeeRepository = employeeRepository;
             this.userRepository = userRepository;
@@ -199,7 +204,7 @@ namespace EmployeeManagment.Services
         {
             try
             {
-                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(department) || request == null || string.IsNullOrEmpty(request.Name))
+                if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(department) || string.IsNullOrEmpty(request.Name))
                 {
                     return Result<Employee>.Failure("Employee ID, department, and name are required.");
                 }

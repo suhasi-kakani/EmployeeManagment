@@ -16,9 +16,11 @@ namespace EmployeeManagment.Services
     {
         private readonly IConfiguration configuration;
         private readonly ILogger<AuthService> logger;
-        private readonly UserRepository userRepository;
+        private readonly IUserRepository userRepository;
 
-        public AuthService(IConfiguration configuration, ILogger<AuthService> logger, UserRepository userRepository)
+        public AuthService() {}
+
+        public AuthService(IConfiguration configuration, ILogger<AuthService> logger, IUserRepository userRepository)
         {
             this.configuration = configuration;
             this.logger = logger;

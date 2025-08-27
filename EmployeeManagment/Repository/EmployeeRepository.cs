@@ -5,17 +5,20 @@ using EmployeeManagment_MSSQL.Exceptions;
 using Microsoft.Azure.Cosmos;
 using Newtonsoft.Json;
 using System.Text;
+using EmployeeManagment.Interfaces;
+using EmployeeManagment.Utilities;
 
 namespace EmployeeManagment.Repository
 {
-    public class EmployeeRepository
+    public class EmployeeRepository : IEmployeeRepository
     {
-        private readonly CosmosDbService cosmos;
+        private readonly ICosmosDbService cosmos;
         private readonly ILogger<EmployeeRepository> logger;
 
-        public EmployeeRepository(CosmosDbService cosmos, ILogger<EmployeeRepository> logger)
+        public EmployeeRepository() { }
+        public EmployeeRepository(ICosmosDbService cosmos, ILogger<EmployeeRepository> logger)
         {
-            this.cosmos = cosmos;
+            this.cosmos = cosmos ?? throw new ArgumentNullException(nameof(cosmos));
             this.logger = logger;
 
         }
@@ -33,7 +36,7 @@ namespace EmployeeManagment.Repository
 
                 if (string.IsNullOrWhiteSpace(employee.Id))
                 {
-                    return Result<Employee>.Failure("Employee Id is required.");
+                    return Result<Employee>.Failure("Employee Id is required.");    
                 }
 
                 if (string.IsNullOrWhiteSpace(employee.Department))
@@ -62,10 +65,9 @@ namespace EmployeeManagment.Repository
             catch (Exception ex)
             {
                 logger.LogError(ex, "Unexpected error while creating employee with ID {EmployeeId}", employee?.Id);
-                return Result<Employee>.Failure($"Unexpected error while creating employee: {ex.Message}");
+                return Result<Employee>.Failure("Unexpected error while creating employee.");
             }
         }
-
 
         public async Task<Result<Employee>> GetById(string id, string department)
         {
@@ -77,7 +79,12 @@ namespace EmployeeManagment.Repository
                 }
 
                 var response = await cosmos.EmployeeContainer.ReadItemAsync<Employee>(id, new PartitionKey(department));
+                logger.LogInformation("Employee detaiil {emp}", response.Resource);
                 return Result<Employee>.Success(response.Resource);
+            }
+            catch (NullReferenceException e)
+            {
+                return Result<Employee>.Failure($"Employee not found. {e.Message}");
             }
             catch (CosmosException e)  when (e.StatusCode == System.Net.HttpStatusCode.NotFound)
             {
@@ -238,7 +245,7 @@ namespace EmployeeManagment.Repository
 
                 var options = new QueryRequestOptions { MaxItemCount = pageSize };
 
-                string decodedToken = string.IsNullOrEmpty(continuationToken) ? null : DecodeContinuationToken(continuationToken);
+                string decodedToken = string.IsNullOrEmpty(continuationToken) ? null : TokenHelper.DecodeContinuationToken(continuationToken);
 
                 var iterator = cosmos.EmployeeContainer.GetItemQueryIterator<EmployeeSummaryDto>(query, decodedToken, options);
 
@@ -252,26 +259,12 @@ namespace EmployeeManagment.Repository
                     newToken = response.ContinuationToken;
                 }
 
-                return Result<(List<EmployeeSummaryDto>, string?)>.Success((result, string.IsNullOrEmpty(newToken) ? null : EncodeContinuationToken(newToken)));
+                return Result<(List<EmployeeSummaryDto>, string?)>.Success((result, string.IsNullOrEmpty(newToken) ? null : TokenHelper.EncodeContinuationToken(newToken)));
             }
             catch (Exception e)
             {
                 return Result<(List<EmployeeSummaryDto>, string?)>.Failure($"Failed to retrieve paged employee summaries: {e.Message}");
             }
-        }
-
-        public string EncodeContinuationToken(string token)
-        {
-            if (string.IsNullOrEmpty(token)) return null;
-            var bytes = Encoding.UTF8.GetBytes(token);
-            return Convert.ToBase64String(bytes);
-        }
-
-        public string DecodeContinuationToken(string encodedToken)
-        {
-            if (string.IsNullOrEmpty(encodedToken)) return null;
-            var bytes = Convert.FromBase64String(encodedToken);
-            return Encoding.UTF8.GetString(bytes);
         }
     }
 }
